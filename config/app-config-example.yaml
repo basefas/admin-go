@@ -1,0 +1,16 @@
+# rename filename to app-config.yaml
+app:
+  name: admin-go
+  runMode: debug # release or debug
+  host: 127.0.0.1
+  port: 8086
+  jwtSecret: admin-go
+  jwtTimeout: 7200 # seconds
+
+db:
+  mysql:
+    host: 127.0.0.1
+    port: 3306
+    user: root
+    password: root
+    name: admin-go
