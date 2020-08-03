@@ -112,12 +112,6 @@ func Update(userID string, uu UpdateUser) error {
 	if uu.Email != "" {
 		updateUser["email"] = uu.Email
 	}
-	if uu.RoleID != 0 {
-		updateUser["role_id"] = uu.RoleID
-	}
-	if uu.GroupID != 0 {
-		updateUser["group_id"] = uu.GroupID
-	}
 	if uu.Status != 0 {
 		updateUser["status"] = uu.Status
 	}
@@ -189,7 +183,41 @@ func Delete(userID string) error {
 	}
 
 	u := User{Status: 2}
-	if err := db.Mysql.Where("id = ?", userID).Delete(&u).Error; err != nil {
+
+	tx := db.Mysql.Begin()
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	if err := tx.
+		Where("id = ?", userID).
+		Delete(&u).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.
+		Where("user_id = ?", userID).
+		Delete(&UserGroup{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.
+		Where("user_id = ?", userID).
+		Delete(&UserRole{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return err
 	}
 
