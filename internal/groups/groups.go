@@ -1,6 +1,8 @@
 package groups
 
 import (
+	"fmt"
+	"go-admin/internal/auth"
 	"go-admin/internal/utils/db"
 
 	"github.com/jinzhu/gorm"
@@ -11,6 +13,8 @@ var (
 	ErrGroupNotFound = errors.New("Group not found.")
 
 	ErrGroupExists = errors.New("Group already exist.")
+
+	ErrGroupHasUser = errors.New("Group has user, delete user first.")
 )
 
 func Create(cg CreateGroup) error {
@@ -22,10 +26,40 @@ func Create(cg CreateGroup) error {
 		}
 	}
 
-	g := Group{GroupName: cg.GroupName, ParentID: cg.ParentID}
+	g := Group{GroupName: cg.GroupName}
+	gr := GroupRole{GroupID: g.ID, RoleID: cg.RoleID}
 
-	err := db.Mysql.Create(&g).Error
-	return err
+	tx := db.Mysql.Begin()
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	if err := tx.Create(&g).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Create(&gr).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("group::%d", g.ID), fmt.Sprintf("role::%d", gr.RoleID)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func Get(groupID string) (*GetGroupInfo, error) {
@@ -49,17 +83,58 @@ func Update(groupID string, ug UpdateGroup) error {
 	}
 
 	updateGroup := make(map[string]interface{})
+
 	if ug.GroupName != "" {
 		updateGroup["group_name"] = ug.GroupName
 	}
-	updateGroup["parent_id"] = ug.ParentID
 
-	err := db.Mysql.
-		Debug().
-		Model(Group{}).
+	tx := db.Mysql.Begin()
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	if err := tx.
+		Model(&Group{}).
 		Where("id = ?", groupID).
-		Updates(updateGroup).Error
-	return err
+		Updates(updateGroup).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if ug.RoleID != 0 {
+		gr := GroupRole{RoleID: ug.RoleID}
+
+		if err := tx.
+			Model(&GroupRole{}).
+			Where("group_id = ?", groupID).
+			Updates(&gr).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	if ug.RoleID != 0 {
+		if _, err := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("group::%s", groupID), fmt.Sprintf("role::%d", ug.RoleID)); err != nil {
+			return err
+		}
+
+		if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("group::%s", groupID), fmt.Sprintf("role::%d", ug.RoleID)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func Delete(groupID string) error {
@@ -67,31 +142,84 @@ func Delete(groupID string) error {
 		return err
 	}
 
-	err := db.Mysql.
+	u, err := GetUserForGroup(groupID)
+	fmt.Println(u)
+	if err != nil {
+		return err
+	}
+
+	if len(u) > 0 {
+		return ErrGroupHasUser
+	}
+
+	tx := db.Mysql.Begin()
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	if err := tx.
 		Where("id = ?", groupID).
-		Delete(&Group{}).Error
-	return err
+		Delete(&Group{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.
+		Where("group_id = ?", groupID).
+		Delete(&UserGroup{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("group::%s", groupID)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func List() ([]GetGroupInfo, error) {
 	var groups []GetGroupInfo
 	sql := `
-		SELECT g.id, g.group_name, g.parent_id, g.created_at, g.updated_at, n.num AS head_count
+		SELECT g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name
 		FROM group_ AS g
-		LEFT JOIN (
-			SELECT g.id, count(*) AS num
-			FROM group_ AS g
-			LEFT JOIN user_group ug ON g.id = ug.group_id
-			GROUP BY g.id) AS n
-		ON g.id= n.id
+		LEFT JOIN group_role AS gr ON gr.group_id = g.id
+		LEFT JOIN role_ AS r ON r.id = gr.role_id
 		WHERE g.deleted_at IS NULL
+		ORDER BY g.id ASC
 		`
-	err := db.Mysql.
+	if err := db.Mysql.
 		Raw(sql).
-		Scan(&groups).Error
-	if err != nil {
+		Scan(&groups).Error; err != nil {
 		return nil, err
 	}
 
 	return groups, nil
+}
+
+func GetUserForGroup(groupID string) ([]User, error) {
+	var u []User
+
+	if err := db.Mysql.
+		Select("u.id, u.username").Table("user_group AS ug").
+		Joins("LEFT JOIN user_ AS u ON ug.user_id = u.id").
+		Where("ug.deleted_at IS NULL").
+		Where("u.deleted_at IS NULL").
+		Where("group_id =?", groupID).
+		Scan(&u).Error; err != nil {
+		return nil, err
+	}
+
+	return u, nil
 }

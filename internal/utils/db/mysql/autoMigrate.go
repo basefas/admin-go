@@ -11,12 +11,13 @@ import (
 
 func AutoMigrate() {
 	db.Mysql.AutoMigrate(&users.User{})
-	db.Mysql.AutoMigrate(&groups.Group{})
-	db.Mysql.AutoMigrate(&roles.Role{})
 	db.Mysql.AutoMigrate(&users.UserGroup{})
 	db.Mysql.AutoMigrate(&users.UserRole{})
-	db.Mysql.AutoMigrate(&menus.Menu{})
+	db.Mysql.AutoMigrate(&groups.Group{})
+	db.Mysql.AutoMigrate(&groups.GroupRole{})
+	db.Mysql.AutoMigrate(&roles.Role{})
 	db.Mysql.AutoMigrate(&roles.RoleMenu{})
+	db.Mysql.AutoMigrate(&menus.Menu{})
 	db.Mysql.AutoMigrate(&global.AuthLog{})
 	db.Mysql.AutoMigrate(&global.OptLog{})
 }
