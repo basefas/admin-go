@@ -58,7 +58,6 @@ func Update(roleID string, ur UpdateRole) error {
 	}
 
 	err := db.Mysql.
-		Debug().
 		Model(Role{}).
 		Where("id = ?", roleID).
 		Updates(updateRole).Error
