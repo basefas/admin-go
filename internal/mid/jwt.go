@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"go-admin/internal/auth"
 	"net/http"
 
@@ -15,8 +14,7 @@ func JWT() gin.HandlerFunc {
 		if token == "" {
 			code = -1
 		} else {
-			claims, err := auth.ParseToken(token)
-			fmt.Println(claims)
+			_, err := auth.ParseToken(token)
 			if err != nil {
 				code = -2
 			}
@@ -25,7 +23,7 @@ func JWT() gin.HandlerFunc {
 		if code != 0 {
 			c.JSON(http.StatusOK, gin.H{
 				"code":    code,
-				"message": "Auth Error",
+				"message": "Token Error",
 				"data":    nil,
 			})
 			c.Abort()
