@@ -309,10 +309,12 @@ func list(userID uint) ([]MenuInfo, error) {
 		}
 	} else {
 		if err := db.Mysql.
-			Select("m.*").Table("role_menu AS rm").
+			Select("m.*").
+			Table("role_menu AS rm").
 			Joins("LEFT JOIN user_role AS ur ON rm.role_id = ur.role_id").
 			Joins("LEFT JOIN menu AS m ON rm.menu_id = m.id").
 			Where("rm.deleted_at IS NULL").
+			Where("ur.deleted_at IS NULL").
 			Where("m.deleted_at IS NULL").
 			Where("user_id =?", userID).
 			Order("order_id asc").
