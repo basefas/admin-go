@@ -230,17 +230,16 @@ func Delete(userID string) error {
 
 func List() ([]UserInfo, error) {
 	var users []UserInfo
-	sql := `
-		SELECT u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.group_name, r.id AS role_id, r.role_name
-		FROM user_ AS u
-		LEFT JOIN user_group ug ON ug.user_id = u.id
-		LEFT JOIN group_ g ON g.id = ug.group_id
-		LEFT JOIN user_role ur ON ur.user_id = u.id
-		LEFT JOIN role_ r ON r.id = ur.role_id
-		WHERE u.deleted_at IS NULL
-		`
+
 	if err := db.Mysql.
-		Raw(sql).
+		Select("u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.group_name, r.id AS role_id, r.role_name").
+		Table("user_ AS u").
+		Joins("LEFT JOIN user_group ug ON ug.user_id = u.id").
+		Joins("LEFT JOIN group_ g ON g.id = ug.group_id").
+		Joins("LEFT JOIN user_role ur ON ur.user_id = u.id").
+		Joins("LEFT JOIN role_ r ON r.id = ur.role_id").
+		Where("u.deleted_at IS NULL").
+		Order("u.id ASC").
 		Scan(&users).Error; err != nil {
 		return nil, err
 	}

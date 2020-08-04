@@ -143,7 +143,6 @@ func Delete(groupID string) error {
 	}
 
 	u, err := GetUserForGroup(groupID)
-	fmt.Println(u)
 	if err != nil {
 		return err
 	}
@@ -152,33 +151,9 @@ func Delete(groupID string) error {
 		return ErrGroupHasUser
 	}
 
-	tx := db.Mysql.Begin()
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Error; err != nil {
-		return err
-	}
-
-	if err := tx.
+	if err := db.Mysql.
 		Where("id = ?", groupID).
 		Delete(&Group{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.
-		Where("group_id = ?", groupID).
-		Delete(&UserGroup{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
 		return err
 	}
 
@@ -191,16 +166,16 @@ func Delete(groupID string) error {
 
 func List() ([]GetGroupInfo, error) {
 	var groups []GetGroupInfo
-	sql := `
-		SELECT g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name
-		FROM group_ AS g
-		LEFT JOIN group_role AS gr ON gr.group_id = g.id
-		LEFT JOIN role_ AS r ON r.id = gr.role_id
-		WHERE g.deleted_at IS NULL
-		ORDER BY g.id ASC
-		`
+
 	if err := db.Mysql.
-		Raw(sql).
+		Select("g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name").
+		Table("group_ AS g").
+		Joins("LEFT JOIN group_role AS gr ON gr.group_id = g.id").
+		Joins("LEFT JOIN role_ AS r ON r.id = gr.role_id").
+		Where("g.deleted_at IS NULL").
+		Where("gr.deleted_at IS NULL").
+		Where("r.deleted_at IS NULL").
+		Order("g.id ASC").
 		Scan(&groups).Error; err != nil {
 		return nil, err
 	}
@@ -212,11 +187,13 @@ func GetUserForGroup(groupID string) ([]User, error) {
 	var u []User
 
 	if err := db.Mysql.
-		Select("u.id, u.username").Table("user_group AS ug").
+		Select("u.id, u.username").
+		Table("user_group AS ug").
 		Joins("LEFT JOIN user_ AS u ON ug.user_id = u.id").
 		Where("ug.deleted_at IS NULL").
 		Where("u.deleted_at IS NULL").
 		Where("group_id =?", groupID).
+		Order("u.id ASC").
 		Scan(&u).Error; err != nil {
 		return nil, err
 	}
