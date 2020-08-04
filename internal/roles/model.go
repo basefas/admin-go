@@ -34,3 +34,8 @@ type RoleMenu struct {
 	RoleID uint `json:"role_id" gorm:"NOT NULL"`
 	MenuID uint `json:"menu_id" gorm:"NOT NULL"`
 }
+
+type User struct {
+	UserID   uint   `json:"id"`
+	Username string `json:"name"`
+}

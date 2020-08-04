@@ -15,6 +15,8 @@ var (
 	ErrRoleNotFound = errors.New("Role not found.")
 
 	ErrRoleExists = errors.New("Role already exist.")
+
+	ErrRoleHasUser = errors.New("Role has user, delete user first.")
 )
 
 func Create(cr CreateRole) error {
@@ -69,9 +71,20 @@ func Delete(roleID string) error {
 		return err
 	}
 
-	err := db.Mysql.
+	u, err := GetUserForRole(roleID)
+	if err != nil {
+		return err
+	}
+
+	if len(u) > 0 {
+		return ErrRoleHasUser
+	}
+
+	if err := db.Mysql.
 		Where("id = ?", roleID).
-		Delete(&Role{}).Error
+		Delete(&Role{}).Error; err != nil {
+		return err
+	}
 	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("role::%s", roleID)); err != nil {
 		return err
 	}
@@ -79,7 +92,7 @@ func Delete(roleID string) error {
 		return err
 	}
 
-	return err
+	return nil
 }
 
 func List() ([]GetRoleInfo, error) {
@@ -137,4 +150,22 @@ func UpdateRoleMenu(roleID string, new []uint) error {
 		}
 	}
 	return err
+}
+
+func GetUserForRole(roleID string) ([]User, error) {
+	var u []User
+
+	if err := db.Mysql.
+		Select("u.id, u.username").
+		Table("user_role AS ur").
+		Joins("LEFT JOIN user_ AS u ON ur.user_id = u.id").
+		Where("ur.deleted_at IS NULL").
+		Where("u.deleted_at IS NULL").
+		Where("role_id =?", roleID).
+		Order("u.id ASC").
+		Scan(&u).Error; err != nil {
+		return nil, err
+	}
+
+	return u, nil
 }
