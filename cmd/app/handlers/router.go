@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"go-admin/cmd/app/handlers/base"
 	"go-admin/cmd/app/handlers/v1"
 	"go-admin/internal/auth"
 	middleware "go-admin/internal/mid"
@@ -39,7 +40,7 @@ func setupRouter() *gin.Engine {
 	r.Use(middleware.Cors())
 	r.Use(middleware.Syslog())
 
-	r.GET("/health", v1.Health)
+	r.GET("/health", base.Health)
 	api := r.Group("/api/v1")
 	api.GET("/menus", v1.MenuList)
 	api.POST("/login", v1.LogIn)

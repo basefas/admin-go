@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"go-admin/cmd/app/handlers"
 	"go-admin/internal/auth"
 	"go-admin/internal/menus"
 	"go-admin/internal/utils"
@@ -14,14 +15,14 @@ func MenuCreate(c *gin.Context) {
 	var cm menus.CreateMenu
 	if err := c.ShouldBindJSON(&cm); err != nil {
 		//Re(c, -1, InvalidArguments.Error(), nil)
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 		return
 	}
 	err := menus.Create(cm)
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", nil)
+		handlers.Re(c, 0, "success", nil)
 	}
 }
 
@@ -37,9 +38,9 @@ func MenuGet(c *gin.Context) {
 		mi, err = menus.Get(menuID)
 	}
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", mi)
+		handlers.Re(c, 0, "success", mi)
 	}
 }
 
@@ -48,14 +49,14 @@ func MenuUpdate(c *gin.Context) {
 	menuID := uint(menuID64)
 	var um menus.UpdateMenu
 	if err := c.ShouldBindJSON(&um); err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 		return
 	}
 	err := menus.Update(menuID, um)
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", nil)
+		handlers.Re(c, 0, "success", nil)
 	}
 }
 
@@ -71,9 +72,9 @@ func MenuDelete(c *gin.Context) {
 	}
 
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", nil)
+		handlers.Re(c, 0, "success", nil)
 	}
 }
 
@@ -94,8 +95,8 @@ func MenuList(c *gin.Context) {
 	}
 
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", ml)
+		handlers.Re(c, 0, "success", ml)
 	}
 }

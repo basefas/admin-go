@@ -1,9 +1,15 @@
-package v1
+package handlers
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
+)
+
+var (
+	InvalidArguments = errors.New("Invalid arguments")
+	AuthError        = errors.New("auth error.")
 )
 
 type Response struct {

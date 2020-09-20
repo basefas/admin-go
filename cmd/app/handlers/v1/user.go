@@ -2,6 +2,7 @@ package v1
 
 import (
 	"fmt"
+	"go-admin/cmd/app/handlers"
 	"go-admin/internal/auth"
 	"go-admin/internal/users"
 
@@ -15,16 +16,16 @@ func UserGet(c *gin.Context) {
 	userID, _ := auth.GetUID(token)
 
 	if !checkID(id, userID) {
-		Re(c, -1, errors.New("auth error.").Error(), nil)
+		handlers.Re(c, -1, errors.New("auth error.").Error(), nil)
 		return
 	}
 
 	u, err := users.Get(id)
 
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", u)
+		handlers.Re(c, 0, "success", u)
 	}
 }
 
@@ -34,22 +35,22 @@ func UserUpdate(c *gin.Context) {
 	userID, _ := auth.GetUID(token)
 
 	if !checkID(id, userID) {
-		Re(c, -1, AuthError.Error(), nil)
+		handlers.Re(c, -1, handlers.AuthError.Error(), nil)
 		return
 	}
 
 	var uu users.UpdateUser
 	if err := c.ShouldBindJSON(&uu); err != nil {
-		Re(c, -1, InvalidArguments.Error(), nil)
+		handlers.Re(c, -1, handlers.InvalidArguments.Error(), nil)
 		return
 	}
 
 	err := users.Update(id, uu)
 
 	if err != nil {
-		Re(c, -1, err.Error(), nil)
+		handlers.Re(c, -1, err.Error(), nil)
 	} else {
-		Re(c, 0, "success", nil)
+		handlers.Re(c, 0, "success", nil)
 	}
 }
 
