@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 var (

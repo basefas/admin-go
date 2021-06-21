@@ -10,11 +10,11 @@ import (
 var jwtSecret []byte
 
 type Claims struct {
-	UID uint
+	UID uint64
 	jwt.StandardClaims
 }
 
-func GenerateToken(userID uint) (string, error) {
+func GenerateToken(userID uint64) (string, error) {
 	jwtSecret = []byte(viper.GetString("app.jwtSecret"))
 	now := time.Now()
 	expireTime := now.Add(time.Second * time.Duration(viper.GetInt("app.jwtTimeout")))
@@ -46,7 +46,7 @@ func ParseToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func GetUID(tokenString string) (uint, error) {
+func GetUID(tokenString string) (uint64, error) {
 	claims, err := ParseToken(tokenString)
 	if err != nil {
 		return 0, err

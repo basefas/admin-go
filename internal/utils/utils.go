@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"admin-go/internal/utils/log"
 	"bytes"
 	"fmt"
 	"io/ioutil"
@@ -12,12 +13,12 @@ func LogRequestBody(c *gin.Context) {
 	buf := make([]byte, 1024)
 	num, _ := c.Request.Body.Read(buf)
 	reqBody := string(buf[0:num])
-	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(reqBody))) // Write body back
-	fmt.Println("body: " + reqBody)
+	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(reqBody)))
+	log.Debug("body: " + reqBody)
 }
 
 func LogRequestHeader(c *gin.Context) {
-	fmt.Println("header: " + fmt.Sprint(c.Request.Header))
+	log.Debug("header: " + fmt.Sprint(c.Request.Header))
 }
 
 func LogRequest(c *gin.Context) {
@@ -33,9 +34,9 @@ func GetRequestBody(c *gin.Context) string {
 	return reqBody
 }
 
-func Intersect(a, b []uint) []uint {
-	m := make(map[uint]int)
-	n := make([]uint, 0)
+func Intersect(a, b []uint64) []uint64 {
+	m := make(map[uint64]int64)
+	n := make([]uint64, 0)
 	for _, v := range a {
 		m[v]++
 	}
@@ -49,9 +50,9 @@ func Intersect(a, b []uint) []uint {
 	return n
 }
 
-func Difference(a, b []uint) []uint {
-	m := make(map[uint]int)
-	n := make([]uint, 0)
+func Difference(a, b []uint64) []uint64 {
+	m := make(map[uint64]int)
+	n := make([]uint64, 0)
 	inter := Intersect(a, b)
 	for _, v := range inter {
 		m[v]++

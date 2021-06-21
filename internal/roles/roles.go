@@ -1,55 +1,72 @@
 package roles
 
 import (
+	"admin-go/internal/auth"
+	"admin-go/internal/groups"
+	"admin-go/internal/users"
+	"admin-go/internal/utils"
+	"admin-go/internal/utils/db"
 	"fmt"
-	"go-admin/internal/auth"
-	"go-admin/internal/utils"
-	"go-admin/internal/utils/db"
-	"strconv"
 
-	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
+	"gorm.io/gorm"
 )
 
 var (
-	ErrRoleNotFound = errors.New("Role not found.")
+	ErrRoleNotFound = errors.New("角色不存在")
 
-	ErrRoleExists = errors.New("Role already exist.")
+	ErrRoleExists = errors.New("角色已存在")
 
-	ErrRoleHasUser = errors.New("Role has user, delete user first.")
+	ErrRoleBind = errors.New("存在未删除绑定关系")
 )
 
 func Create(cr CreateRole) error {
+	r := Role{}
+
 	if err := db.Mysql.
 		Where("role_name = ?", cr.RoleName).
-		Find(&Role{}).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return ErrRoleExists
+		Find(&r).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
 	}
 
-	r := Role{RoleName: cr.RoleName}
+	if r.ID != 0 {
+		return ErrRoleExists
+	}
 
-	err := db.Mysql.Create(&r).Error
+	nr := Role{RoleName: cr.RoleName}
+
+	err := db.Mysql.Create(&nr).Error
 	return err
 }
 
-func Get(roleID string) (*GetRoleInfo, error) {
-	var r GetRoleInfo
-
-	if err := db.Mysql.
-		Model(&Role{}).
-		Where("id = ?", roleID).
-		Scan(&r).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return nil, ErrRoleNotFound
+func Get(roleID uint64) (role Role, err error) {
+	if err = db.Mysql.Take(&role, roleID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return role, ErrRoleNotFound
+		} else {
+			return role, err
 		}
 	}
-
-	return &r, nil
+	return role, nil
 }
 
-func Update(roleID string, ur UpdateRole) error {
+func GetInfo(roleID uint64) (roleInfo RoleInfo, err error) {
+	if err = db.Mysql.
+		Model(&Role{}).
+		Where("id", roleID).
+		Take(&roleInfo).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return roleInfo, ErrRoleNotFound
+		} else {
+			return roleInfo, err
+		}
+	}
+	return roleInfo, nil
+}
+
+func Update(roleID uint64, ur UpdateRole) error {
 	if _, err := Get(roleID); err != nil {
 		return err
 	}
@@ -60,112 +77,110 @@ func Update(roleID string, ur UpdateRole) error {
 	}
 
 	err := db.Mysql.
-		Model(Role{}).
+		Model(&Role{}).
 		Where("id = ?", roleID).
 		Updates(updateRole).Error
 	return err
 }
 
-func Delete(roleID string) error {
+func Delete(roleID uint64) error {
 	if _, err := Get(roleID); err != nil {
 		return err
 	}
 
-	u, err := GetUserForRole(roleID)
-	if err != nil {
-		return err
-	}
-
-	if len(u) > 0 {
-		return ErrRoleHasUser
-	}
+	var ur []users.UserRole
 
 	if err := db.Mysql.
-		Where("id = ?", roleID).
-		Delete(&Role{}).Error; err != nil {
+		Model(&users.UserRole{}).
+		Where("role_id = ?", roleID).
+		Find(&ur).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+
+	if len(ur) > 0 {
+		return ErrRoleBind
+	}
+
+	var gr []groups.GroupRole
+
+	if err := db.Mysql.
+		Model(&groups.GroupRole{}).
+		Where("role_id = ?", roleID).
+		Find(&gr).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+
+	if len(gr) > 0 {
+		return ErrRoleBind
+	}
+
+	if err := db.Mysql.Delete(&Role{}, roleID).Error; err != nil {
 		return err
 	}
-	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("role::%s", roleID)); err != nil {
+	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("role::%d", roleID)); err != nil {
 		return err
 	}
-	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(1, fmt.Sprintf("role::%s", roleID)); err != nil {
-		return err
-	}
+	//if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(1, fmt.Sprintf("role::%d", roleID)); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
 
-func List() ([]GetRoleInfo, error) {
-	var roles []GetRoleInfo
+func List() (roles []RoleInfo, err error) {
 
-	if err := db.Mysql.
-		Model(Role{}).
-		Scan(&roles).Error; err != nil {
+	if err = db.Mysql.
+		Model(&Role{}).
+		Find(&roles).Error; err != nil {
 		return nil, err
 	}
 
 	return roles, nil
 }
 
-func GetRoleMenus(roleID string) ([]RoleMenu, error) {
-	var rm []RoleMenu
-
-	if err := db.Mysql.
+func GetRoleMenus(roleID uint64) (roleMenu []RoleMenu, err error) {
+	if err = db.Mysql.
 		Model(&RoleMenu{}).
 		Where("role_id = ?", roleID).
-		Scan(&rm).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return nil, ErrRoleNotFound
-		}
+		Find(&roleMenu).Error; err != nil {
+		return nil, err
 	}
 
-	return rm, nil
+	return roleMenu, nil
 }
 
-func UpdateRoleMenu(roleID string, new []uint) error {
+func UpdateRoleMenu(roleID uint64, new []uint64) error {
 	rm, err := GetRoleMenus(roleID)
-	old := make([]uint, 0)
+	if err != nil {
+		return err
+	}
+	old := make([]uint64, 0)
 	for _, menu := range rm {
 		old = append(old, menu.MenuID)
 	}
 
 	delRoleMenu := utils.Difference(old, new)
 	addRoleMenu := utils.Difference(new, old)
-	for _, id := range delRoleMenu {
+	for _, mid := range delRoleMenu {
 		db.Mysql.
 			Where("role_id = ?", roleID).
-			Where("menu_id = ?", id).
+			Where("menu_id = ?", mid).
 			Delete(&RoleMenu{})
-		if _, err := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("role::%s", roleID), fmt.Sprintf("action::%d", id)); err != nil {
-			return err
+		if _, casbinErr := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("role::%d", roleID), fmt.Sprintf("action::%d", mid)); casbinErr != nil {
+			return casbinErr
 		}
 	}
-	ridInt, _ := strconv.Atoi(roleID)
-	rid := uint(ridInt)
+
 	for _, mid := range addRoleMenu {
-		rm := RoleMenu{RoleID: rid, MenuID: mid}
-		db.Mysql.Create(&rm)
-		if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("role::%d", rid), fmt.Sprintf("action::%d", mid)); err != nil {
-			return err
+		nrm := RoleMenu{RoleID: roleID, MenuID: mid}
+		db.Mysql.Create(&nrm)
+		if _, casbinErr := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("role::%d", roleID), fmt.Sprintf("action::%d", mid)); casbinErr != nil {
+			return casbinErr
 		}
 	}
 	return err
-}
-
-func GetUserForRole(roleID string) ([]User, error) {
-	var u []User
-
-	if err := db.Mysql.
-		Select("u.id, u.username").
-		Table("user_role AS ur").
-		Joins("LEFT JOIN user_ AS u ON ur.user_id = u.id").
-		Where("ur.deleted_at IS NULL").
-		Where("u.deleted_at IS NULL").
-		Where("role_id =?", roleID).
-		Order("u.id ASC").
-		Scan(&u).Error; err != nil {
-		return nil, err
-	}
-
-	return u, nil
 }

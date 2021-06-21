@@ -1,13 +1,13 @@
 package users
 
 import (
+	"admin-go/internal/auth"
+	"admin-go/internal/utils/db"
 	"fmt"
-	"go-admin/internal/auth"
-	"go-admin/internal/utils/db"
 
-	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 var (
@@ -23,79 +23,91 @@ var (
 )
 
 func Create(cu CreateUser) error {
+	u := User{}
+
 	if err := db.Mysql.
 		Where("username = ?", cu.Username).
-		Find(&User{}).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return ErrUserExists
+		Find(&u).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(cu.Password), bcrypt.DefaultCost)
+	if u.ID != 0 {
+		return ErrUserExists
+	}
+
+	hash, pwErr := bcrypt.GenerateFromPassword([]byte(cu.Password), bcrypt.DefaultCost)
+	if pwErr != nil {
+		return pwErr
+	}
+
+	nu := User{Username: cu.Username, Password: string(hash), Email: cu.Email, Status: 1}
+
+	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&nu).Error; err != nil {
+			return err
+		}
+
+		ug := UserGroup{UserID: nu.ID, GroupID: cu.GroupID}
+		ur := UserRole{UserID: nu.ID, RoleID: cu.RoleID}
+		if err := tx.Create(&ug).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&ur).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		fmt.Println(err)
-	}
-
-	u := User{Username: cu.Username, Password: string(hash), Email: cu.Email, Status: 1}
-	ug := UserGroup{UserID: u.ID, GroupID: cu.GroupID}
-	ur := UserRole{UserID: u.ID, RoleID: cu.RoleID}
-
-	tx := db.Mysql.Begin()
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Error; err != nil {
 		return err
 	}
 
-	if err := tx.Create(&u).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Create(&ug).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Create(&ur).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("user::%d", u.ID), fmt.Sprintf("role::%d", cu.RoleID)); err != nil {
-		return err
+	if _, casbinErr := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("user::%d", u.ID), fmt.Sprintf("role::%d", cu.RoleID)); casbinErr != nil {
+		return casbinErr
 	}
 
 	return nil
 }
 
-func Get(userID string) (*UserInfo, error) {
-	var u UserInfo
-
-	if err := db.Mysql.
-		Model(&User{}).
-		Where("id = ?", userID).
-		Scan(&u).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return nil, ErrUserNotFound
+func Get(userID uint64) (user User, err error) {
+	if err = db.Mysql.Take(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return user, ErrUserNotFound
+		} else {
+			return user, err
 		}
 	}
-
-	return &u, nil
+	return user, nil
 }
 
-func Update(userID string, uu UpdateUser) error {
-	if _, err := Get(userID); err != nil {
-		return err
+func GetInfo(userID uint64) (userInfo UserInfo, err error) {
+	if err = db.Mysql.
+		Model(&User{}).
+		Where("id = ?", userID).
+		Take(&userInfo).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return userInfo, ErrUserNotFound
+		} else {
+			return userInfo, err
+		}
+	}
+	return userInfo, err
+}
+
+func Update(userID uint64, uu UpdateUser) error {
+
+	or := UserRole{}
+	if err := db.Mysql.
+		Where("user_id = ?", userID).
+		Take(&or).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrUserNotFound
+		} else {
+			return err
+		}
 	}
 
 	updateUser := make(map[string]interface{})
@@ -105,9 +117,9 @@ func Update(userID string, uu UpdateUser) error {
 	if uu.Password != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(uu.Password), bcrypt.DefaultCost)
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
-		updateUser["password"] = hash
+		updateUser["password"] = string(hash)
 	}
 	if uu.Email != "" {
 		updateUser["email"] = uu.Email
@@ -116,135 +128,107 @@ func Update(userID string, uu UpdateUser) error {
 		updateUser["status"] = uu.Status
 	}
 
-	tx := db.Mysql.Begin()
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Error; err != nil {
-		return err
-	}
-
-	if err := tx.
-		Model(&User{}).
-		Where("id = ?", userID).
-		Updates(updateUser).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if uu.GroupID != 0 {
-		ug := UserGroup{GroupID: uu.GroupID}
-
+	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
 		if err := tx.
-			Model(&UserGroup{}).
-			Where("user_id = ?", userID).
-			Updates(&ug).Error; err != nil {
-			tx.Rollback()
+			Model(&User{}).
+			Where("id = ?", userID).
+			Updates(&updateUser).Error; err != nil {
 			return err
 		}
-	}
 
-	if uu.RoleID != 0 {
-		ur := UserRole{RoleID: uu.RoleID}
-
-		if err := tx.
-			Model(&UserRole{}).
-			Where("user_id = ?", userID).
-			Updates(&ur).Error; err != nil {
-			tx.Rollback()
-			return err
+		if uu.GroupID != 0 {
+			ug := UserGroup{GroupID: uu.GroupID}
+			if err := tx.
+				Model(&UserGroup{}).
+				Where("id = ?", userID).
+				Updates(&ug).Error; err != nil {
+				return err
+			}
 		}
-	}
+		if uu.RoleID != 0 {
+			ur := UserRole{RoleID: uu.RoleID}
+			if err := tx.
+				Model(&UserRole{}).
+				Where("id = ?", userID).
+				Updates(&ur).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 
-	if err := tx.Commit().Error; err != nil {
+	if err != nil {
 		return err
 	}
 
 	if uu.RoleID != 0 {
-		if _, err := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("user::%s", userID), fmt.Sprintf("role::%d", uu.RoleID)); err != nil {
-			return err
+		if _, casbinErr := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("user::%d", userID), fmt.Sprintf("role::%d", or.RoleID)); casbinErr != nil {
+			return casbinErr
 		}
 
-		if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("user::%s", userID), fmt.Sprintf("role::%d", uu.RoleID)); err != nil {
-			return err
+		if _, casbinErr := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("user::%d", userID), fmt.Sprintf("role::%d", uu.RoleID)); casbinErr != nil {
+			return casbinErr
 		}
 	}
 
 	return nil
 }
 
-func Delete(userID string) error {
+func Delete(userID uint64) error {
 	if _, err := Get(userID); err != nil {
 		return err
 	}
 
 	u := User{Status: 2}
 
-	tx := db.Mysql.Begin()
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
+		if err := tx.
+			Where("id = ?", userID).
+			Delete(&u).Error; err != nil {
+			return err
 		}
-	}()
 
-	if err := tx.Error; err != nil {
+		if err := tx.
+			Where("id = ?", userID).
+			Delete(&UserGroup{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.
+			Where("id = ?", userID).
+			Delete(&UserRole{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return err
 	}
 
-	if err := tx.
-		Where("id = ?", userID).
-		Delete(&u).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.
-		Where("user_id = ?", userID).
-		Delete(&UserGroup{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.
-		Where("user_id = ?", userID).
-		Delete(&UserRole{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("user::%s", userID)); err != nil {
-		return err
+	if _, casbinErr := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("user::%d", userID)); casbinErr != nil {
+		return casbinErr
 	}
 
 	return nil
 }
 
-func List() ([]UserInfo, error) {
-	var users []UserInfo
+func List() (users []UserInfo, err error) {
+	const q = `
+		SELECT u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.group_name, r.id AS role_id, r.role_name
+		FROM users AS u
+         LEFT JOIN user_groups ug ON ug.user_id = u.id
+         LEFT JOIN groups g ON g.id = ug.group_id
+         LEFT JOIN user_roles ur ON ur.user_id = u.id
+         LEFT JOIN roles r ON r.id = ur.role_id
+		WHERE u.deleted_at IS NULL
+		ORDER BY u.id`
 
-	if err := db.Mysql.
-		Select("u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.group_name, r.id AS role_id, r.role_name").
-		Table("user_ AS u").
-		Joins("LEFT JOIN user_group ug ON ug.user_id = u.id").
-		Joins("LEFT JOIN group_ g ON g.id = ug.group_id").
-		Joins("LEFT JOIN user_role ur ON ur.user_id = u.id").
-		Joins("LEFT JOIN role_ r ON r.id = ur.role_id").
-		Where("u.deleted_at IS NULL").
-		Order("u.id ASC").
-		Scan(&users).Error; err != nil {
-		return nil, err
-	}
-
-	return users, nil
+	err = db.Mysql.
+		Raw(q).
+		Scan(&users).Error
+	return users, err
 }
 
 func Token(l Login) (LoginInfo, error) {

@@ -1,11 +1,11 @@
 package base
 
 import (
-	"go-admin/cmd/app/handlers"
+	"admin-go/cmd/app/handlers/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func Health(c *gin.Context) {
-	handlers.Re(c, 0, "success", nil)
+	http.Re(c, 0, "success", nil)
 }
