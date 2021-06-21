@@ -1,19 +1,17 @@
 package main
 
 import (
-	"go-admin/cmd/app/handlers"
-	"go-admin/internal/auth"
-	"go-admin/internal/utils/conf"
-	"go-admin/internal/utils/db/mysql"
+	"admin-go/cmd/app/handlers/router"
+	"admin-go/internal/auth"
+	"admin-go/internal/utils/conf"
+	"admin-go/internal/utils/db/mysql"
+	"admin-go/internal/utils/log"
 )
 
 func main() {
-	run()
-}
-
-func run() {
 	conf.Init()
+	log.Init()
 	mysql.Init()
 	auth.Init()
-	handlers.Init()
+	router.Init()
 }

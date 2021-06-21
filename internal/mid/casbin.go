@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"go-admin/internal/auth"
+	"admin-go/internal/auth"
 	"net/http"
 
 	"github.com/casbin/casbin/v2"

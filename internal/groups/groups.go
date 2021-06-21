@@ -1,85 +1,99 @@
 package groups
 
 import (
+	"admin-go/internal/auth"
+	"admin-go/internal/users"
+	"admin-go/internal/utils/db"
 	"fmt"
-	"go-admin/internal/auth"
-	"go-admin/internal/utils/db"
 
-	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
+	"gorm.io/gorm"
 )
 
 var (
-	ErrGroupNotFound = errors.New("Group not found.")
+	ErrGroupNotFound = errors.New("组未找到")
 
-	ErrGroupExists = errors.New("Group already exist.")
+	ErrGroupExists = errors.New("组已存在")
 
-	ErrGroupHasUser = errors.New("Group has user, delete user first.")
+	ErrGroupBind = errors.New("存在未删除绑定关系")
 )
 
 func Create(cg CreateGroup) error {
+	g := Group{}
+
 	if err := db.Mysql.
 		Where("group_name = ?", cg.GroupName).
-		Find(&Group{}).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return ErrGroupExists
+		Find(&g).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
 	}
 
-	g := Group{GroupName: cg.GroupName}
-	gr := GroupRole{GroupID: g.ID, RoleID: cg.RoleID}
+	if g.ID != 0 {
+		return ErrGroupExists
+	}
 
-	tx := db.Mysql.Begin()
+	ng := Group{GroupName: cg.GroupName}
 
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&ng).Error; err != nil {
+			return err
 		}
-	}()
 
-	if err := tx.Error; err != nil {
+		gr := GroupRole{GroupID: ng.ID, RoleID: cg.RoleID}
+		if err := tx.Create(&gr).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return err
 	}
 
-	if err := tx.Create(&g).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Create(&gr).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("group::%d", g.ID), fmt.Sprintf("role::%d", gr.RoleID)); err != nil {
-		return err
+	if _, casbinErr := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("group::%d", ng.ID), fmt.Sprintf("role::%d", cg.RoleID)); casbinErr != nil {
+		return casbinErr
 	}
 
 	return nil
 }
 
-func Get(groupID string) (*GetGroupInfo, error) {
-	var g GetGroupInfo
-
-	if err := db.Mysql.
-		Model(&Group{}).
-		Where("id = ?", groupID).
-		Scan(&g).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return nil, ErrGroupNotFound
+func Get(groupID uint64) (group Group, err error) {
+	if err = db.Mysql.Take(&group, groupID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return group, ErrGroupNotFound
+		} else {
+			return group, err
 		}
 	}
-
-	return &g, nil
+	return group, nil
 }
 
-func Update(groupID string, ug UpdateGroup) error {
-	if _, err := Get(groupID); err != nil {
-		return err
+func GetInfo(groupID uint64) (groupInfo GroupInfo, err error) {
+	if err = db.Mysql.
+		Model(&Group{}).
+		Where("id", groupID).
+		Take(&groupInfo).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return groupInfo, ErrGroupNotFound
+		} else {
+			return groupInfo, err
+		}
+	}
+	return groupInfo, nil
+}
+
+func Update(groupID uint64, ug UpdateGroup) error {
+	og := GroupRole{}
+	if err := db.Mysql.
+		Where("group_id = ?", groupID).
+		Take(&og).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrGroupNotFound
+		} else {
+			return err
+		}
 	}
 
 	updateGroup := make(map[string]interface{})
@@ -88,115 +102,88 @@ func Update(groupID string, ug UpdateGroup) error {
 		updateGroup["group_name"] = ug.GroupName
 	}
 
-	tx := db.Mysql.Begin()
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Error; err != nil {
-		return err
-	}
-
-	if err := tx.
-		Model(&Group{}).
-		Where("id = ?", groupID).
-		Updates(updateGroup).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if ug.RoleID != 0 {
-		gr := GroupRole{RoleID: ug.RoleID}
-
+	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
 		if err := tx.
-			Model(&GroupRole{}).
-			Where("group_id = ?", groupID).
-			Updates(&gr).Error; err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	if ug.RoleID != 0 {
-		if _, err := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("group::%s", groupID), fmt.Sprintf("role::%d", ug.RoleID)); err != nil {
+			Model(&Group{}).
+			Where("id = ?", groupID).
+			Updates(updateGroup).Error; err != nil {
 			return err
 		}
 
-		if _, err := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("group::%s", groupID), fmt.Sprintf("role::%d", ug.RoleID)); err != nil {
-			return err
+		if ug.RoleID != 0 {
+			gr := GroupRole{RoleID: ug.RoleID}
+			if err := tx.
+				Model(&GroupRole{}).
+				Where("group_id = ?", groupID).
+				Updates(&gr).Error; err != nil {
+				return err
+			}
 		}
-	}
 
-	return nil
-}
+		return nil
+	})
 
-func Delete(groupID string) error {
-	if _, err := Get(groupID); err != nil {
-		return err
-	}
-
-	u, err := GetUserForGroup(groupID)
 	if err != nil {
 		return err
 	}
 
-	if len(u) > 0 {
-		return ErrGroupHasUser
+	if ug.RoleID != 0 {
+		if _, casbinErr := auth.Casbin.RemoveGroupingPolicy(fmt.Sprintf("group::%d", groupID), fmt.Sprintf("role::%d", og.RoleID)); casbinErr != nil {
+			return casbinErr
+		}
+
+		if _, casbinErr := auth.Casbin.AddGroupingPolicy(fmt.Sprintf("group::%d", groupID), fmt.Sprintf("role::%d", ug.RoleID)); casbinErr != nil {
+			return casbinErr
+		}
 	}
 
-	if err := db.Mysql.
-		Where("id = ?", groupID).
-		Delete(&Group{}).Error; err != nil {
+	return nil
+}
+
+func Delete(groupID uint64) error {
+	if _, err := Get(groupID); err != nil {
 		return err
 	}
 
-	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("group::%s", groupID)); err != nil {
+	var ug []users.UserGroup
+
+	if err := db.Mysql.
+		Model(&users.UserGroup{}).
+		Where("group_id = ?", groupID).
+		Find(&ug).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+
+	if len(ug) > 0 {
+		return ErrGroupBind
+	}
+
+	if err := db.Mysql.Delete(&Group{}, groupID).Error; err != nil {
+		return err
+	}
+
+	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("group::%d", groupID)); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func List() ([]GetGroupInfo, error) {
-	var groups []GetGroupInfo
+func List() (groups []GroupInfo, err error) {
+	const q = `
+		SELECT g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name
+		FROM groups AS g
+		 LEFT JOIN group_roles AS gr ON gr.group_id = g.id
+		 LEFT JOIN roles AS r ON r.id = gr.role_id
+		WHERE g.deleted_at IS NULL
+		  AND gr.deleted_at IS NULL
+		  AND r.deleted_at IS NULL
+		ORDER BY g.id`
 
-	if err := db.Mysql.
-		Select("g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name").
-		Table("group_ AS g").
-		Joins("LEFT JOIN group_role AS gr ON gr.group_id = g.id").
-		Joins("LEFT JOIN role_ AS r ON r.id = gr.role_id").
-		Where("g.deleted_at IS NULL").
-		Where("gr.deleted_at IS NULL").
-		Where("r.deleted_at IS NULL").
-		Order("g.id ASC").
-		Scan(&groups).Error; err != nil {
-		return nil, err
-	}
-
-	return groups, nil
-}
-
-func GetUserForGroup(groupID string) ([]User, error) {
-	var u []User
-
-	if err := db.Mysql.
-		Select("u.id, u.username").
-		Table("user_group AS ug").
-		Joins("LEFT JOIN user_ AS u ON ug.user_id = u.id").
-		Where("ug.deleted_at IS NULL").
-		Where("u.deleted_at IS NULL").
-		Where("group_id =?", groupID).
-		Order("u.id ASC").
-		Scan(&u).Error; err != nil {
-		return nil, err
-	}
-
-	return u, nil
+	err = db.Mysql.
+		Raw(q).
+		Scan(&groups).Error
+	return groups, err
 }

@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"go-admin/internal/auth"
-	"go-admin/internal/global"
-	"go-admin/internal/utils"
-	"go-admin/internal/utils/db"
+	"admin-go/internal/auth"
+	"admin-go/internal/global"
+	"admin-go/internal/utils"
+	"admin-go/internal/utils/db"
 	"strings"
 
 	"github.com/gin-gonic/gin"

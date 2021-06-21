@@ -1,96 +1,97 @@
 package v1
 
 import (
-	"go-admin/cmd/app/handlers"
-	"go-admin/internal/roles"
+	"admin-go/cmd/app/handlers/http"
+	"admin-go/internal/roles"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 func RoleCreate(c *gin.Context) {
-	var cg roles.CreateRole
-	if err := c.ShouldBindJSON(&cg); err != nil {
-		handlers.Re(c, -1, handlers.InvalidArguments.Error(), nil)
+	var cr roles.CreateRole
+	if err := c.ShouldBindJSON(&cr); err != nil {
+		http.Re(c, -1, err.Error(), nil)
 		return
 	}
-	err := roles.Create(cg)
+	err := roles.Create(cr)
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", nil)
+		http.Re(c, 0, "success", nil)
 	}
 }
 
 func RoleGet(c *gin.Context) {
-	roleID := c.Param("id")
-	r, err := roles.Get(roleID)
+	roleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	r, err := roles.GetInfo(roleID)
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", r)
+		http.Re(c, 0, "success", r)
 	}
 }
 
 func RoleUpdate(c *gin.Context) {
-	roleID := c.Param("id")
+	roleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	var ur roles.UpdateRole
 	if err := c.ShouldBindJSON(&ur); err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 		return
 	}
 	err := roles.Update(roleID, ur)
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", nil)
+		http.Re(c, 0, "success", nil)
 	}
 }
 
 func RoleDelete(c *gin.Context) {
-	roleID := c.Param("id")
+	roleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	err := roles.Delete(roleID)
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", nil)
+		http.Re(c, 0, "success", nil)
 	}
 }
 
 func RoleList(c *gin.Context) {
 	rl, err := roles.List()
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", rl)
+		http.Re(c, 0, "success", rl)
 	}
 }
 
 func RoleMenusList(c *gin.Context) {
-	roleID := c.Param("id")
+	roleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	rm, err := roles.GetRoleMenus(roleID)
-	l := make([]uint, 0)
+	l := make([]uint64, 0)
 	for _, menu := range rm {
 		l = append(l, menu.MenuID)
 	}
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", l)
+		http.Re(c, 0, "success", l)
 	}
 }
 
 func RoleMenusUpdate(c *gin.Context) {
-	roleID := c.Param("id")
-	var ml = make([]uint, 0)
+	roleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	var ml = make([]uint64, 0)
 	if err := c.ShouldBindJSON(&ml); err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 		return
 	}
 	err := roles.UpdateRoleMenu(roleID, ml)
 
 	if err != nil {
-		handlers.Re(c, -1, err.Error(), nil)
+		http.Re(c, -1, err.Error(), nil)
 	} else {
-		handlers.Re(c, 0, "success", nil)
+		http.Re(c, 0, "success", nil)
 	}
 }

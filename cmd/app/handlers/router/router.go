@@ -1,11 +1,11 @@
-package handlers
+package router
 
 import (
+	"admin-go/cmd/app/handlers/base"
+	v1 "admin-go/cmd/app/handlers/v1"
+	"admin-go/internal/auth"
+	middleware "admin-go/internal/mid"
 	"fmt"
-	"go-admin/cmd/app/handlers/base"
-	"go-admin/cmd/app/handlers/v1"
-	"go-admin/internal/auth"
-	middleware "go-admin/internal/mid"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
@@ -13,30 +13,30 @@ import (
 
 func Init() {
 	r := setupRouter()
-	port := fmt.Sprintf(":%s", viper.GetString("app.port"))
+	port := fmt.Sprintf(":%d", viper.GetInt64("app.port"))
 	err := r.Run(port)
-	if err != nil {
-		fmt.Println(err)
-	}
-}
 
-func setMode() {
-	switch viper.GetString("app.runMode") {
-	case "release":
-		gin.SetMode(gin.ReleaseMode)
-	case "debug":
-		gin.SetMode(gin.DebugMode)
-	default:
-		fmt.Println("Load App Mode Error!")
+	if err != nil {
+		fmt.Println("[init] " + err.Error())
+		panic("router init failed.")
 	}
 }
 
 func setupRouter() *gin.Engine {
-	setMode()
-
+	runMode := viper.GetString("app.runMode")
+	if runMode == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	} else {
+		gin.SetMode(gin.DebugMode)
+	}
 	r := gin.New()
-	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
+	if runMode == "release" {
+		r.Use(middleware.GinLogger())
+		r.Use(middleware.GinRecovery(true))
+	} else {
+		r.Use(gin.Logger())
+		r.Use(gin.Recovery())
+	}
 	r.Use(middleware.Cors())
 	r.Use(middleware.Syslog())
 

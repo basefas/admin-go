@@ -1,18 +1,18 @@
 package menus
 
 import (
+	"admin-go/internal/auth"
+	"admin-go/internal/utils/db"
 	"fmt"
-	"go-admin/internal/auth"
-	"go-admin/internal/utils/db"
 
-	"github.com/jinzhu/gorm"
 	"github.com/pkg/errors"
+	"gorm.io/gorm"
 )
 
 var (
-	ErrMenuNotFound = errors.New("Menu not found.")
-
-	ErrMenuExists = errors.New("Menu already exist.")
+	ErrMenuNotFound = errors.New("未找到菜单")
+	ErrMenuExists   = errors.New("菜单已存在")
+	ErrMenuBind     = errors.New("存在未删除绑定关系")
 )
 
 func Create(cm CreateMenu) error {
@@ -22,7 +22,7 @@ func Create(cm CreateMenu) error {
 		Where("menu_path = ?", cm.MenuPath).
 		Where("method = ?", cm.Method).
 		Find(&m).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 	}
@@ -31,53 +31,68 @@ func Create(cm CreateMenu) error {
 		return ErrMenuExists
 	}
 
-	nm := Menu{MenuName: cm.MenuName, MenuPath: cm.MenuPath, MenuType: cm.MenuType, Method: cm.Method, Icon: cm.Icon, ParentID: cm.ParentID, OrderID: cm.OrderID}
+	nm := Menu{
+		MenuName: cm.MenuName,
+		MenuPath: cm.MenuPath,
+		MenuType: cm.MenuType,
+		Method:   cm.Method,
+		Icon:     cm.Icon,
+		ParentID: cm.ParentID,
+		OrderID:  cm.OrderID}
 
-	err := db.Mysql.Create(&nm).Error
-	if cm.MenuType == 2 || cm.MenuType == 3 {
-		_, err := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", nm.ID), nm.MenuPath, nm.Method)
+	if err := db.Mysql.Create(&nm).Error; err != nil {
 		return err
 	}
-	return err
-}
 
-func Get(menuID uint) (*MenuInfo, error) {
-	var m MenuInfo
-
-	if err := db.Mysql.
-		Model(&Menu{}).
-		Where("id = ?", menuID).
-		Scan(&m).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return nil, ErrMenuNotFound
+	if cm.MenuType == 2 || cm.MenuType == 3 {
+		if _, casbinErr := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", nm.ID), nm.MenuPath, nm.Method); casbinErr != nil {
+			return casbinErr
 		}
 	}
 
-	return &m, nil
+	return nil
 }
 
-func GetTree(menuID uint) (*MenuInfo, error) {
-	var m MenuInfo
-
-	if err := db.Mysql.
+func GetInfo(menuID uint64) (menuInfo MenuInfo, err error) {
+	if err = db.Mysql.
 		Model(&Menu{}).
-		Where("id = ?", menuID).
-		Scan(&m).Error; err != nil {
-		if !gorm.IsRecordNotFoundError(err) {
-			return nil, ErrMenuNotFound
+		Where("id", menuID).
+		Take(&menuInfo).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return menuInfo, ErrMenuNotFound
+		} else {
+			return menuInfo, err
 		}
 	}
-	funs := make([]*MenuInfo, 0)
-	var err error
+	return menuInfo, nil
+}
+
+func Get(menuID uint64) (menu Menu, err error) {
+	if err = db.Mysql.Take(&menu, menuID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return menu, ErrMenuNotFound
+		} else {
+			return menu, err
+		}
+	}
+	return menu, nil
+}
+
+func GetTree(menuID uint64) (menuInfo MenuInfo, err error) {
+	menuInfo, err = GetInfo(menuID)
+	if err != nil {
+		return menuInfo, err
+	}
+	funs := make([]MenuInfo, 0)
 	funs, err = FunListForPid(menuID)
 	if err != nil {
-		return nil, err
+		return menuInfo, err
 	}
-	m.Funs = funs
-	return &m, nil
+	menuInfo.Funs = funs
+	return menuInfo, nil
 }
 
-func Update(menuID uint, um UpdateMenu) error {
+func Update(menuID uint64, um UpdateMenu) error {
 	oldMenu, err := Get(menuID)
 	if err != nil {
 		return err
@@ -104,11 +119,11 @@ func Update(menuID uint, um UpdateMenu) error {
 	}
 	updateMenu["parent_id"] = um.ParentID
 
-	if err := db.Mysql.
-		Model(Menu{}).
+	if dbErr := db.Mysql.
+		Model(&Menu{}).
 		Where("id = ?", menuID).
-		Updates(updateMenu).Error; err != nil {
-		return err
+		Updates(updateMenu).Error; dbErr != nil {
+		return dbErr
 	}
 
 	newMenu, err1 := Get(menuID)
@@ -117,51 +132,41 @@ func Update(menuID uint, um UpdateMenu) error {
 	}
 
 	if oldMenu.MenuType == 2 || oldMenu.MenuType == 3 {
-		if _, err := auth.Casbin.RemovePolicy(fmt.Sprintf("action::%d", oldMenu.ID), oldMenu.MenuPath, oldMenu.Method); err != nil {
-			return err
+		if _, casbinErr := auth.Casbin.RemovePolicy(fmt.Sprintf("action::%d", oldMenu.ID), oldMenu.MenuPath, oldMenu.Method); casbinErr != nil {
+			return casbinErr
 		}
 	}
 
 	if newMenu.MenuType == 2 || newMenu.MenuType == 3 {
-		if _, err := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", newMenu.ID), newMenu.MenuPath, newMenu.Method); err != nil {
-			return err
+		if _, casbinErr := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", newMenu.ID), newMenu.MenuPath, newMenu.Method); casbinErr != nil {
+			return casbinErr
 		}
 	}
 
 	return nil
 }
 
-func Delete(menuID uint) error {
+func Delete(menuID uint64) error {
 	if _, err := Get(menuID); err != nil {
 		return err
 	}
 
-	tx := db.Mysql.Begin()
+	var rm []RoleMenu
 
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Error; err != nil {
-		return err
-	}
-
-	if err := tx.
-		Where("id = ?", menuID).
-		Delete(&Menu{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.
+	if err := db.Mysql.
+		Model(&RoleMenu{}).
 		Where("menu_id = ?", menuID).
-		Delete(&RoleMenu{}).Error; err != nil {
-		tx.Rollback()
-		return err
+		Find(&rm).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 	}
-	if err := tx.Commit().Error; err != nil {
+
+	if len(rm) > 0 {
+		return ErrMenuBind
+	}
+
+	if err := db.Mysql.Delete(&Menu{}, menuID).Error; err != nil {
 		return err
 	}
 
@@ -172,100 +177,28 @@ func Delete(menuID uint) error {
 	return nil
 }
 
-func DeleteTree(menuID uint) error {
-	if _, err := Get(menuID); err != nil {
-		return err
-	}
-
-	menus, err := List()
-	if err != nil {
-		return err
-	}
-	ids := make([]uint, 0)
-	ids = append(ids, menuID)
-	ids = append(ids, getChildrenID(menuID, menus)...)
-
-	tx := db.Mysql.Begin()
-
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Error; err != nil {
-		return err
-	}
-
-	if err := tx.
-		Where("id IN (?)", ids).
-		Delete(&Menu{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.
-		Where("menu_id IN (?)", ids).
-		Delete(&RoleMenu{}).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-
-	for _, id := range ids {
-		if _, err := auth.Casbin.RemoveFilteredPolicy(0, fmt.Sprintf("action::%d", id)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func getChildrenID(pid uint, menus []MenuInfo) []uint {
-	childrenID := make([]uint, 0)
-	for _, menu := range menus {
-		if menu.ParentID == pid {
-			childrenID = append(childrenID, menu.ID)
-		}
-	}
-
-	for _, id := range childrenID {
-		childrenID = append(childrenID, getChildrenID(id, menus)...)
-	}
-	return childrenID
-}
-
-func List() ([]MenuInfo, error) {
-	menus := make([]MenuInfo, 0)
-
-	err := db.Mysql.
+func List() (menus []MenuInfo, err error) {
+	if err = db.Mysql.
 		Model(&Menu{}).
-		Scan(&menus).Error
-	if err != nil {
+		Find(&menus).Error; err != nil {
 		return nil, err
 	}
 
 	return menus, nil
 }
 
-func FunListForPid(pid uint) ([]*MenuInfo, error) {
-	var menus []*MenuInfo
-
-	err := db.Mysql.
+func FunListForPid(pid uint64) (menus []MenuInfo, err error) {
+	if err = db.Mysql.
 		Model(&Menu{}).
 		Where("menu_type = ?", 3).
 		Where("parent_id = ?", pid).
-		Scan(&menus).Error
-	if err != nil {
+		Find(&menus).Error; err != nil {
 		return nil, err
 	}
-
 	return menus, nil
 }
 
-func System(userID uint) ([]MenuInfo, error) {
+func System(userID uint64) ([]MenuInfo, error) {
 	return TreeForPid(0, userID)
 }
 
@@ -273,8 +206,11 @@ func Tree() ([]MenuInfo, error) {
 	return TreeForPid(0, 0)
 }
 
-func TreeForPid(pid, userID uint) ([]MenuInfo, error) {
-	l, err := list(userID)
+func TreeForPid(pid, userID uint64) (menus []MenuInfo, err error) {
+	l, listErr := list(userID)
+	if listErr != nil {
+		return menus, listErr
+	}
 	ml := make([]MenuInfo, 0)
 	fl := make([]MenuInfo, 0)
 	root := make([]MenuInfo, 0)
@@ -289,44 +225,44 @@ func TreeForPid(pid, userID uint) ([]MenuInfo, error) {
 			root = append(root, item)
 		}
 	}
-	menus := make([]MenuInfo, 0)
 	for _, menu := range root {
-		menu.Children = getMenuChildren(menu.ID, ml, fl)
+		menu.Children = getMenuForPid(menu.ID, ml, fl)
 		menu.Funs = getFunForPid(menu.ID, fl)
 		menus = append(menus, menu)
 	}
 	return menus, err
 }
 
-func list(userID uint) ([]MenuInfo, error) {
-	menus := make([]MenuInfo, 0)
+func list(userID uint64) (menus []MenuInfo, err error) {
 	if userID == 0 {
-		if err := db.Mysql.
+		if err = db.Mysql.
 			Model(&Menu{}).
-			Order("order_id asc").
-			Scan(&menus).Error; err != nil {
-			return nil, err
+			Order("order_id").
+			Find(&menus).Error; err != nil {
+			return menus, err
 		}
 	} else {
-		if err := db.Mysql.
-			Select("m.*").
-			Table("role_menu AS rm").
-			Joins("LEFT JOIN user_role AS ur ON rm.role_id = ur.role_id").
-			Joins("LEFT JOIN menu AS m ON rm.menu_id = m.id").
-			Where("rm.deleted_at IS NULL").
-			Where("ur.deleted_at IS NULL").
-			Where("m.deleted_at IS NULL").
-			Where("user_id =?", userID).
-			Order("order_id asc").
+		const q = `
+		SELECT m.*
+		FROM menus AS m
+		  LEFT JOIN role_menus AS rm ON rm.menu_id = m.id
+		  LEFT JOIN user_roles AS ur ON rm.role_id = ur.role_id
+		WHERE rm.deleted_at IS NULL
+		  AND ur.deleted_at IS NULL
+		  AND m.deleted_at IS NULL
+		  AND user_id = ?
+		ORDER BY order_id`
+
+		if err = db.Mysql.
+			Raw(q, userID).
 			Scan(&menus).Error; err != nil {
-			return nil, err
+			return menus, err
 		}
 	}
-
 	return menus, nil
 }
 
-func getMenuChildren(pid uint, menuList, funList []MenuInfo) []*MenuInfo {
+func getMenuForPid(pid uint64, menuList, funList []MenuInfo) []MenuInfo {
 	cl := make([]MenuInfo, 0)
 	for _, menu := range menuList {
 		if menu.ParentID == pid {
@@ -334,23 +270,23 @@ func getMenuChildren(pid uint, menuList, funList []MenuInfo) []*MenuInfo {
 		}
 	}
 
-	children := make([]*MenuInfo, 0)
+	children := make([]MenuInfo, 0)
 	for i, menu := range cl {
-		cl[i].Children = getMenuChildren(menu.ID, menuList, funList)
+		cl[i].Children = getMenuForPid(menu.ID, menuList, funList)
 		cl[i].Funs = getFunForPid(menu.ID, funList)
-		children = append(children, &cl[i])
+		children = append(children, cl[i])
 	}
 
 	return children
 }
 
-func getFunForPid(pid uint, funs []MenuInfo) []*MenuInfo {
-	fs := make([]*MenuInfo, 0)
+func getFunForPid(pid uint64, funs []MenuInfo) []MenuInfo {
+	fs := make([]MenuInfo, 0)
 	for i, fun := range funs {
 		if pid == fun.ParentID {
-			funs[i].Children = make([]*MenuInfo, 0)
-			funs[i].Funs = make([]*MenuInfo, 0)
-			fs = append(fs, &funs[i])
+			funs[i].Children = make([]MenuInfo, 0)
+			funs[i].Funs = make([]MenuInfo, 0)
+			fs = append(fs, funs[i])
 		}
 	}
 	return fs

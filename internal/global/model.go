@@ -1,16 +1,22 @@
 package global
 
 import (
-	"github.com/jinzhu/gorm"
+	"time"
+
+	"gorm.io/gorm"
 )
 
 type Model struct {
-	gorm.Model
+	ID        uint64 `gorm:"primaryKey;type:uint;size:32;"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+	//gorm.Model
 }
 
 type OptLog struct {
-	gorm.Model
-	UserID   uint   `json:"user_id"`
+	Model
+	UserID   uint64 `json:"user_id" gorm:"type:uint;size:32;"`
 	Url      string `json:"url"`
 	Method   string `json:"method"`
 	Body     string `json:"body"`
@@ -18,8 +24,8 @@ type OptLog struct {
 }
 
 type AuthLog struct {
-	gorm.Model
+	Model
 	Username   string `json:"username"`
 	ClientIP   string `json:"client_ip"`
-	AuthStatus uint   `json:"auth_status" gorm:"default:0"`
+	AuthStatus uint64 `json:"auth_status" gorm:"default:0;type:uint;size:32;"`
 }
