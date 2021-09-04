@@ -10,10 +10,7 @@ import (
 )
 
 func LogRequestBody(c *gin.Context) {
-	buf := make([]byte, 1024)
-	num, _ := c.Request.Body.Read(buf)
-	reqBody := string(buf[0:num])
-	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(reqBody)))
+	reqBody := GetRequestBody(c)
 	log.Debug("body: " + reqBody)
 }
 
@@ -27,10 +24,9 @@ func LogRequest(c *gin.Context) {
 }
 
 func GetRequestBody(c *gin.Context) string {
-	buf := make([]byte, 1024)
-	num, _ := c.Request.Body.Read(buf)
-	reqBody := string(buf[0:num])
-	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(reqBody)))
+	buf, _ := c.GetRawData()
+	reqBody := string(buf)
+	c.Request.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
 	return reqBody
 }
 
