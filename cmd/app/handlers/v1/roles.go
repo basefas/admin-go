@@ -82,7 +82,7 @@ func RoleMenusList(c *gin.Context) {
 
 func RoleMenusUpdate(c *gin.Context) {
 	roleID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	var ml = make([]uint64, 0)
+	ml := make([]uint64, 0)
 	if err := c.ShouldBindJSON(&ml); err != nil {
 		http.Re(c, -1, err.Error(), nil)
 		return

@@ -215,6 +215,7 @@ func Delete(userID uint64) error {
 }
 
 func List() (users []UserInfo, err error) {
+	users = make([]UserInfo, 0)
 	const q = `
 		SELECT u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.group_name, r.id AS role_id, r.role_name
 		FROM users AS u

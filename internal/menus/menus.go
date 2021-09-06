@@ -16,7 +16,7 @@ var (
 )
 
 func Create(cm CreateMenu) error {
-	var m = Menu{}
+	var m Menu
 	if err := db.Mysql.
 		Where("menu_name = ?", cm.MenuName).
 		Where("menu_path = ?", cm.MenuPath).
@@ -151,7 +151,7 @@ func Delete(menuID uint64) error {
 		return err
 	}
 
-	var rm []RoleMenu
+	rm := make([]RoleMenu, 0)
 
 	if err := db.Mysql.
 		Model(&RoleMenu{}).
@@ -178,6 +178,7 @@ func Delete(menuID uint64) error {
 }
 
 func List() (menus []MenuInfo, err error) {
+	menus = make([]MenuInfo, 0)
 	if err = db.Mysql.
 		Model(&Menu{}).
 		Find(&menus).Error; err != nil {
@@ -188,6 +189,7 @@ func List() (menus []MenuInfo, err error) {
 }
 
 func FunListForPid(pid uint64) (menus []MenuInfo, err error) {
+	menus = make([]MenuInfo, 0)
 	if err = db.Mysql.
 		Model(&Menu{}).
 		Where("menu_type = ?", 3).

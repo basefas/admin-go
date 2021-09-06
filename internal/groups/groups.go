@@ -145,7 +145,7 @@ func Delete(groupID uint64) error {
 		return err
 	}
 
-	var ug []users.UserGroup
+	ug := make([]users.UserGroup, 0)
 
 	if err := db.Mysql.
 		Model(&users.UserGroup{}).
@@ -172,6 +172,7 @@ func Delete(groupID uint64) error {
 }
 
 func List() (groups []GroupInfo, err error) {
+	groups = make([]GroupInfo, 0)
 	const q = `
 		SELECT g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name
 		FROM groups AS g

@@ -88,7 +88,7 @@ func Delete(roleID uint64) error {
 		return err
 	}
 
-	var ur []users.UserRole
+	ur := make([]users.UserRole, 0)
 
 	if err := db.Mysql.
 		Model(&users.UserRole{}).
@@ -103,7 +103,7 @@ func Delete(roleID uint64) error {
 		return ErrRoleBind
 	}
 
-	var gr []groups.GroupRole
+	gr := make([]groups.GroupRole, 0)
 
 	if err := db.Mysql.
 		Model(&groups.GroupRole{}).
@@ -132,7 +132,7 @@ func Delete(roleID uint64) error {
 }
 
 func List() (roles []RoleInfo, err error) {
-
+	roles = make([]RoleInfo, 0)
 	if err = db.Mysql.
 		Model(&Role{}).
 		Find(&roles).Error; err != nil {
@@ -143,6 +143,7 @@ func List() (roles []RoleInfo, err error) {
 }
 
 func GetRoleMenus(roleID uint64) (roleMenu []RoleMenu, err error) {
+	roleMenu = make([]RoleMenu, 0)
 	if err = db.Mysql.
 		Model(&RoleMenu{}).
 		Where("role_id = ?", roleID).
