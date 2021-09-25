@@ -2,6 +2,7 @@ package menus
 
 import (
 	"admin-go/internal/auth"
+	"admin-go/internal/roles"
 	"admin-go/internal/utils/db"
 	"fmt"
 
@@ -16,10 +17,10 @@ var (
 )
 
 func Create(cm CreateMenu) error {
-	var m = Menu{}
+	var m Menu
 	if err := db.Mysql.
-		Where("menu_name = ?", cm.MenuName).
-		Where("menu_path = ?", cm.MenuPath).
+		Where("name = ?", cm.Name).
+		Where("path = ?", cm.Path).
 		Where("method = ?", cm.Method).
 		Find(&m).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -32,9 +33,9 @@ func Create(cm CreateMenu) error {
 	}
 
 	nm := Menu{
-		MenuName: cm.MenuName,
-		MenuPath: cm.MenuPath,
-		MenuType: cm.MenuType,
+		Name:     cm.Name,
+		Path:     cm.Path,
+		Type:     cm.Type,
 		Method:   cm.Method,
 		Icon:     cm.Icon,
 		ParentID: cm.ParentID,
@@ -44,8 +45,8 @@ func Create(cm CreateMenu) error {
 		return err
 	}
 
-	if cm.MenuType == 2 || cm.MenuType == 3 {
-		if _, casbinErr := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", nm.ID), nm.MenuPath, nm.Method); casbinErr != nil {
+	if cm.Type == 2 || cm.Type == 3 {
+		if _, casbinErr := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", nm.ID), nm.Path, nm.Method); casbinErr != nil {
 			return casbinErr
 		}
 	}
@@ -99,14 +100,14 @@ func Update(menuID uint64, um UpdateMenu) error {
 	}
 
 	updateMenu := make(map[string]interface{})
-	if um.MenuName != "" {
-		updateMenu["menu_name"] = um.MenuName
+	if um.Name != "" {
+		updateMenu["name"] = um.Name
 	}
-	if um.MenuPath != "" {
-		updateMenu["menu_path"] = um.MenuPath
+	if um.Path != "" {
+		updateMenu["path"] = um.Path
 	}
-	if um.MenuType != 0 {
-		updateMenu["menu_type"] = um.MenuType
+	if um.Type != 0 {
+		updateMenu["type"] = um.Type
 	}
 	if um.Method != "" {
 		updateMenu["method"] = um.Method
@@ -131,14 +132,14 @@ func Update(menuID uint64, um UpdateMenu) error {
 		return err1
 	}
 
-	if oldMenu.MenuType == 2 || oldMenu.MenuType == 3 {
-		if _, casbinErr := auth.Casbin.RemovePolicy(fmt.Sprintf("action::%d", oldMenu.ID), oldMenu.MenuPath, oldMenu.Method); casbinErr != nil {
+	if oldMenu.Type == 2 || oldMenu.Type == 3 {
+		if _, casbinErr := auth.Casbin.RemovePolicy(fmt.Sprintf("action::%d", oldMenu.ID), oldMenu.Path, oldMenu.Method); casbinErr != nil {
 			return casbinErr
 		}
 	}
 
-	if newMenu.MenuType == 2 || newMenu.MenuType == 3 {
-		if _, casbinErr := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", newMenu.ID), newMenu.MenuPath, newMenu.Method); casbinErr != nil {
+	if newMenu.Type == 2 || newMenu.Type == 3 {
+		if _, casbinErr := auth.Casbin.AddPolicy(fmt.Sprintf("action::%d", newMenu.ID), newMenu.Path, newMenu.Method); casbinErr != nil {
 			return casbinErr
 		}
 	}
@@ -151,10 +152,10 @@ func Delete(menuID uint64) error {
 		return err
 	}
 
-	var rm []RoleMenu
+	rm := make([]roles.RoleMenu, 0)
 
 	if err := db.Mysql.
-		Model(&RoleMenu{}).
+		Model(&roles.RoleMenu{}).
 		Where("menu_id = ?", menuID).
 		Find(&rm).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -178,6 +179,7 @@ func Delete(menuID uint64) error {
 }
 
 func List() (menus []MenuInfo, err error) {
+	menus = make([]MenuInfo, 0)
 	if err = db.Mysql.
 		Model(&Menu{}).
 		Find(&menus).Error; err != nil {
@@ -188,9 +190,10 @@ func List() (menus []MenuInfo, err error) {
 }
 
 func FunListForPid(pid uint64) (menus []MenuInfo, err error) {
+	menus = make([]MenuInfo, 0)
 	if err = db.Mysql.
 		Model(&Menu{}).
-		Where("menu_type = ?", 3).
+		Where("type = ?", 3).
 		Where("parent_id = ?", pid).
 		Find(&menus).Error; err != nil {
 		return nil, err
@@ -214,11 +217,12 @@ func TreeForPid(pid, userID uint64) (menus []MenuInfo, err error) {
 	ml := make([]MenuInfo, 0)
 	fl := make([]MenuInfo, 0)
 	root := make([]MenuInfo, 0)
+	menus = make([]MenuInfo, 0)
 	for _, item := range l {
-		if item.MenuType == 1 || item.MenuType == 2 {
+		if item.Type == 1 || item.Type == 2 {
 			ml = append(ml, item)
 		}
-		if item.MenuType == 3 {
+		if item.Type == 3 {
 			fl = append(fl, item)
 		}
 		if item.ParentID == pid {
@@ -244,9 +248,9 @@ func list(userID uint64) (menus []MenuInfo, err error) {
 	} else {
 		const q = `
 		SELECT m.*
-		FROM menus AS m
-		  LEFT JOIN role_menus AS rm ON rm.menu_id = m.id
-		  LEFT JOIN user_roles AS ur ON rm.role_id = ur.role_id
+		FROM ag_menu AS m
+		  LEFT JOIN ag_role_menu AS rm ON rm.menu_id = m.id
+		  LEFT JOIN ag_user_role AS ur ON rm.role_id = ur.role_id
 		WHERE rm.deleted_at IS NULL
 		  AND ur.deleted_at IS NULL
 		  AND m.deleted_at IS NULL

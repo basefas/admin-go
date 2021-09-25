@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gorm.io/driver/mysql"
+	"gorm.io/gorm/logger"
 
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
@@ -23,7 +24,6 @@ func Init() {
 	host := viper.GetString("db.mysql.host")
 	port := viper.GetUint64("db.mysql.port")
 	name := viper.GetString("db.mysql.name")
-	CreateDatabase(user, password, host, port, name)
 
 	dsn := fmt.Sprintf("%s:%s@(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", user, password, host, port, name)
 
@@ -32,10 +32,11 @@ func Init() {
 		DefaultStringSize:        255,
 		DisableDatetimePrecision: true,
 	}), &gorm.Config{
-		//Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "Error 1049") {
+			CreateDatabase(user, password, host, port, name)
 		} else {
 			fmt.Println("[init] " + err.Error())
 			panic("db init failed.")
@@ -60,5 +61,7 @@ func CreateDatabase(user, password, host string, port uint64, name string) {
 	err = t.Exec(createSQL).Error
 	if err != nil {
 		fmt.Println("[init] " + err.Error())
+	} else {
+		fmt.Printf("[init] Create Database %s.\n", name)
 	}
 }

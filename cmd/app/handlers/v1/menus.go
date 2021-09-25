@@ -4,14 +4,12 @@ import (
 	"admin-go/cmd/app/handlers/http"
 	"admin-go/internal/auth"
 	"admin-go/internal/menus"
-	"admin-go/internal/utils"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 func MenuCreate(c *gin.Context) {
-	utils.GetRequestBody(c)
 	var cm menus.CreateMenu
 	if err := c.ShouldBindJSON(&cm); err != nil {
 		http.Re(c, -1, err.Error(), nil)
@@ -69,7 +67,7 @@ func MenuDelete(c *gin.Context) {
 
 func MenuList(c *gin.Context) {
 	menuType := c.Query("type")
-	var ml []menus.MenuInfo
+	ml := make([]menus.MenuInfo, 0)
 	var err error
 
 	switch menuType {

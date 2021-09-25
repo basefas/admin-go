@@ -7,20 +7,24 @@ import (
 
 type Role struct {
 	global.Model
-	RoleName string `json:"name" gorm:"NOT NULL"`
+	Name string `json:"name" gorm:"NOT NULL"`
+}
+
+func (Role) TableName() string {
+	return "ag_role"
 }
 
 type CreateRole struct {
-	RoleName string `json:"name" binding:"required"`
+	Name string `json:"name" binding:"required"`
 }
 
 type UpdateRole struct {
-	RoleName string `json:"name"`
+	Name string `json:"name"`
 }
 
 type RoleInfo struct {
 	ID        uint64    `json:"id"`
-	RoleName  string    `json:"name"`
+	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"create_time"`
 	UpdatedAt time.Time `json:"update_time"`
 }
@@ -31,7 +35,6 @@ type RoleMenu struct {
 	MenuID uint64 `json:"menu_id" gorm:"type:uint;size:32;NOT NULL;"`
 }
 
-type User struct {
-	UserID   uint64 `json:"id"`
-	Username string `json:"name"`
+func (RoleMenu) TableName() string {
+	return "ag_role_menu"
 }
