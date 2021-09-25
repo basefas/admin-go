@@ -24,7 +24,7 @@ func Create(cr CreateRole) error {
 	r := Role{}
 
 	if err := db.Mysql.
-		Where("role_name = ?", cr.RoleName).
+		Where("name = ?", cr.Name).
 		Find(&r).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -35,7 +35,7 @@ func Create(cr CreateRole) error {
 		return ErrRoleExists
 	}
 
-	nr := Role{RoleName: cr.RoleName}
+	nr := Role{Name: cr.Name}
 
 	err := db.Mysql.Create(&nr).Error
 	return err
@@ -72,8 +72,8 @@ func Update(roleID uint64, ur UpdateRole) error {
 	}
 
 	updateRole := make(map[string]interface{})
-	if ur.RoleName != "" {
-		updateRole["role_name"] = ur.RoleName
+	if ur.Name != "" {
+		updateRole["name"] = ur.Name
 	}
 
 	err := db.Mysql.
@@ -124,9 +124,6 @@ func Delete(roleID uint64) error {
 	if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(0, fmt.Sprintf("role::%d", roleID)); err != nil {
 		return err
 	}
-	//if _, err := auth.Casbin.RemoveFilteredGroupingPolicy(1, fmt.Sprintf("role::%d", roleID)); err != nil {
-	//	return err
-	//}
 
 	return nil
 }

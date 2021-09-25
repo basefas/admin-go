@@ -13,6 +13,10 @@ type User struct {
 	Status   uint64 `json:"status" gorm:"type:uint;size:32;"`
 }
 
+func (User) TableName() string {
+	return "ag_user"
+}
+
 type CreateUser struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -61,8 +65,16 @@ type UserGroup struct {
 	GroupID uint64 `json:"group_id" gorm:"type:uint;size:32;NOT NULL;"`
 }
 
+func (UserGroup) TableName() string {
+	return "ag_user_group"
+}
+
 type UserRole struct {
 	global.Model
 	UserID uint64 `json:"user_id" gorm:"type:uint;size:32;NOT NULL;"`
 	RoleID uint64 `json:"role_id" gorm:"type:uint;size:32;NOT NULL;"`
+}
+
+func (UserRole) TableName() string {
+	return "ag_user_role"
 }

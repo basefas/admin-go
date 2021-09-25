@@ -23,9 +23,17 @@ type OptLog struct {
 	ClientIP string `json:"client_ip"`
 }
 
+func (OptLog) TableName() string {
+	return "ag_pot_log"
+}
+
 type AuthLog struct {
 	Model
 	Username   string `json:"username"`
 	ClientIP   string `json:"client_ip"`
 	AuthStatus uint64 `json:"auth_status" gorm:"default:0;type:uint;size:32;"`
+}
+
+func (AuthLog) TableName() string {
+	return "ag_auth_log"
 }

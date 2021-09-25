@@ -22,7 +22,7 @@ func Create(cg CreateGroup) error {
 	g := Group{}
 
 	if err := db.Mysql.
-		Where("group_name = ?", cg.GroupName).
+		Where("name = ?", cg.Name).
 		Find(&g).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -33,7 +33,7 @@ func Create(cg CreateGroup) error {
 		return ErrGroupExists
 	}
 
-	ng := Group{GroupName: cg.GroupName}
+	ng := Group{Name: cg.Name}
 
 	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&ng).Error; err != nil {
@@ -98,8 +98,8 @@ func Update(groupID uint64, ug UpdateGroup) error {
 
 	updateGroup := make(map[string]interface{})
 
-	if ug.GroupName != "" {
-		updateGroup["group_name"] = ug.GroupName
+	if ug.Name != "" {
+		updateGroup["name"] = ug.Name
 	}
 
 	err := db.Mysql.Transaction(func(tx *gorm.DB) error {
@@ -174,10 +174,10 @@ func Delete(groupID uint64) error {
 func List() (groups []GroupInfo, err error) {
 	groups = make([]GroupInfo, 0)
 	const q = `
-		SELECT g.id, g.group_name, g.created_at, g.updated_at, r.id AS role_id, r.role_name
-		FROM groups AS g
-		 LEFT JOIN group_roles AS gr ON gr.group_id = g.id
-		 LEFT JOIN roles AS r ON r.id = gr.role_id
+		SELECT g.id, g.name, g.created_at, g.updated_at, r.id AS role_id, r.name AS role_name
+		FROM ag_group AS g
+		 LEFT JOIN ag_group_role AS gr ON gr.group_id = g.id
+		 LEFT JOIN ag_role AS r ON r.id = gr.role_id
 		WHERE g.deleted_at IS NULL
 		  AND gr.deleted_at IS NULL
 		  AND r.deleted_at IS NULL

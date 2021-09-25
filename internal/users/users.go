@@ -217,12 +217,12 @@ func Delete(userID uint64) error {
 func List() (users []UserInfo, err error) {
 	users = make([]UserInfo, 0)
 	const q = `
-		SELECT u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.group_name, r.id AS role_id, r.role_name
-		FROM users AS u
-         LEFT JOIN user_groups ug ON ug.user_id = u.id
-         LEFT JOIN groups g ON g.id = ug.group_id
-         LEFT JOIN user_roles ur ON ur.user_id = u.id
-         LEFT JOIN roles r ON r.id = ur.role_id
+		SELECT u.id, u.username, u.email, u.status, u.created_at, u.updated_at, g.id AS group_id, g.name AS group_name, r.id AS role_id, r.name AS role_name
+		FROM ag_user AS u
+         LEFT JOIN ag_user_group AS ug ON ug.user_id = u.id
+         LEFT JOIN ag_group AS g ON g.id = ug.group_id
+         LEFT JOIN ag_user_role AS ur ON ur.user_id = u.id
+         LEFT JOIN ag_role AS r ON r.id = ur.role_id
 		WHERE u.deleted_at IS NULL
 		ORDER BY u.id`
 

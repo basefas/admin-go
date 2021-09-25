@@ -7,29 +7,33 @@ import (
 
 type Menu struct {
 	global.Model
-	MenuName string `json:"name" gorm:"NOT NULL"`
-	MenuPath string `json:"path" gorm:"NOT NULL"`
+	Name     string `json:"name" gorm:"NOT NULL"`
+	Path     string `json:"path" gorm:"NOT NULL"`
 	Method   string `json:"method" gorm:"NOT NULL"`
-	MenuType uint64 `json:"menu_type" gorm:"type:uint;size:32;NOT NULL;"`
+	Type     uint64 `json:"type" gorm:"type:uint;size:32;NOT NULL;"`
 	Icon     string `json:"icon" gorm:"NOT NULL"`
 	ParentID uint64 `json:"parent_id" gorm:"type:uint;size:32;NOT NULL;"`
 	OrderID  uint64 `json:"order_id" gorm:"type:uint;size:32;NOT NULL;default:999999;"`
 }
 
+func (Menu) TableName() string {
+	return "ag_menu"
+}
+
 type CreateMenu struct {
-	MenuName string `json:"name" binding:"required"`
-	MenuPath string `json:"path" binding:"required"`
+	Name     string `json:"name" binding:"required"`
+	Path     string `json:"path" binding:"required"`
 	Method   string `json:"method" binding:"-"`
-	MenuType uint64 `json:"menu_type" binding:"required"`
+	Type     uint64 `json:"type" binding:"required"`
 	Icon     string `json:"icon" binding:"-"`
 	ParentID uint64 `json:"parent_id" binding:"-"`
 	OrderID  uint64 `json:"order_id" binding:"-"`
 }
 
 type UpdateMenu struct {
-	MenuName string `json:"name"`
-	MenuPath string `json:"path"`
-	MenuType uint64 `json:"menu_type"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Type     uint64 `json:"type"`
 	Method   string `json:"method"`
 	Icon     string `json:"icon"`
 	ParentID uint64 `json:"parent_id"`
@@ -38,9 +42,9 @@ type UpdateMenu struct {
 
 type MenuInfo struct {
 	ID        uint64     `json:"id"`
-	MenuName  string     `json:"name"`
-	MenuPath  string     `json:"path"`
-	MenuType  uint64     `json:"menu_type"`
+	Name      string     `json:"name"`
+	Path      string     `json:"path"`
+	Type      uint64     `json:"type"`
 	Method    string     `json:"method"`
 	Icon      string     `json:"icon"`
 	ParentID  uint64     `json:"parent_id"`
@@ -49,10 +53,4 @@ type MenuInfo struct {
 	UpdatedAt time.Time  `json:"update_time"`
 	Children  []MenuInfo `json:"children" gorm:"-"`
 	Funs      []MenuInfo `json:"funs" gorm:"-"`
-}
-
-type RoleMenu struct {
-	global.Model
-	RoleID uint64 `json:"role_id" gorm:"type:uint;size:32;NOT NULL;"`
-	MenuID uint64 `json:"menu_id" gorm:"type:uint;size:32;NOT NULL;"`
 }
