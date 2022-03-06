@@ -3,9 +3,14 @@ version: '3'
 services:
 
   mysql:
-    image: mysql:5.7
+    image: mysql/mysql-server:5.7
     environment:
       MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_USER: "root"
+      MYSQL_DATABASE: "admin-go"
+    volumes:
+      - ./mysql/config/my.cnf:/etc/my.cnf
+      - ./mysql/init:/docker-entrypoint-initdb.d/
     networks:
       - default
     expose:
