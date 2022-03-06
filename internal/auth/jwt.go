@@ -3,37 +3,35 @@ package auth
 import (
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/spf13/viper"
 )
 
-var jwtSecret []byte
-
 type Claims struct {
 	UID uint64
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 func GenerateToken(userID uint64) (string, error) {
-	jwtSecret = []byte(viper.GetString("app.jwtSecret"))
+	jwtSecret := []byte(viper.GetString("app.jwtSecret"))
 	now := time.Now()
 	expireTime := now.Add(time.Second * time.Duration(viper.GetInt("app.jwtTimeout")))
 	claims := Claims{
 		userID,
-		jwt.StandardClaims{
-			ExpiresAt: expireTime.Unix(),
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expireTime),
 			Issuer:    viper.GetString("app.name"),
-			IssuedAt:  now.Unix(),
+			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
 
-	tokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	token, err := tokenClaims.SignedString(jwtSecret)
-	return token, err
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtSecret)
+	return tokenString, err
 }
 
 func ParseToken(tokenString string) (*Claims, error) {
-	jwtSecret = []byte(viper.GetString("app.jwtSecret"))
+	jwtSecret := []byte(viper.GetString("app.jwtSecret"))
 
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return jwtSecret, nil
