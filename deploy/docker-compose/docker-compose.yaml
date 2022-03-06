@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+    networks:
+      - default
+    expose:
+      - "13306"
+    ports:
+      - "13306:3306"
+
+  admin-go:
+    image: ghcr.io/basefas/admin-go:0.0.3
+    volumes:
+      - ./config/app-config.yaml:/usr/src/app/config/app-config.yaml
+    depends_on:
+      - mysql
+    restart: always
+    networks:
+      - default
+    ports:
+      - "8086:8086"
+
+  react-antd-admin:
+    image: ghcr.io/basefas/react-antd-admin:0.0.3
+    volumes:
+      - ./config/config.js:/usr/share/nginx/html/config/config.js
+    depends_on:
+      - admin-go
+    restart: always
+    networks:
+      - default
+    ports:
+      - "3003:80"

@@ -1,0 +1,15 @@
+app:
+  name: admin-go
+  runMode: release
+  host: 0.0.0.0
+  port: 8086
+  jwtSecret: admin-go
+  jwtTimeout: 300000
+
+db:
+  mysql:
+    host: mysql
+    port: 3306
+    user: root
+    password: root
+    name: admin-go
