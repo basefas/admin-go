@@ -14,7 +14,7 @@ services:
       - "13306:3306"
 
   admin-go:
-    image: ghcr.io/basefas/admin-go:0.0.3
+    image: ghcr.io/basefas/admin-go:v0.0.3
     volumes:
       - ./config/app-config.yaml:/usr/src/app/config/app-config.yaml
     depends_on:
@@ -26,7 +26,7 @@ services:
       - "8086:8086"
 
   react-antd-admin:
-    image: ghcr.io/basefas/react-antd-admin:0.0.3
+    image: ghcr.io/basefas/react-antd-admin:v0.0.3
     volumes:
       - ./config/config.js:/usr/share/nginx/html/config/config.js
     depends_on:
