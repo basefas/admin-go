@@ -1,12 +1,12 @@
-FROM golang:1.17 as builder
+FROM golang:1.19-alpine as builder
 ENV CGO_ENABLED 0
-WORKDIR /usr/src/app/
+WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY ./ ./
-RUN GOOS=linux GOARCH=amd64 go build -o ./bin/admin-go cmd/app/main.go
+RUN go build -o ./bin/app cmd/app/main.go
 
-FROM alpine:3.14
-WORKDIR /usr/src/app/
-COPY --from=builder /usr/src/app/bin/admin-go ./
+FROM alpine
+WORKDIR /app
+COPY --from=builder /app/bin/app ./
 ENTRYPOINT ["./app"]

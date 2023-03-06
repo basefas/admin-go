@@ -3,7 +3,7 @@ version: '3'
 services:
 
   mysql:
-    image: mysql/mysql-server:5.7
+    image: mysql/mysql-server:8.0
     environment:
       MYSQL_ROOT_PASSWORD: "root"
       MYSQL_USER: "root"
@@ -19,7 +19,7 @@ services:
       - "13306:3306"
 
   admin-go:
-    image: ghcr.io/basefas/admin-go:v0.0.3
+    image: ghcr.io/basefas/admin-go:v0.1.0
     volumes:
       - ./config/app-config.yaml:/usr/src/app/config/app-config.yaml
     depends_on:
@@ -31,9 +31,7 @@ services:
       - "8086:8086"
 
   react-antd-admin:
-    image: ghcr.io/basefas/react-antd-admin:v0.0.3
-    volumes:
-      - ./config/config.js:/usr/share/nginx/html/config/config.js
+    image: ghcr.io/basefas/react-antd-admin:v0.1.0
     depends_on:
       - admin-go
     restart: always

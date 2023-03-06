@@ -1,6 +1,6 @@
 module admin-go
 
-go 1.17
+go 1.19
 
 require (
 	github.com/casbin/casbin/v2 v2.41.1
