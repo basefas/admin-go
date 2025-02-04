@@ -1,4 +1,4 @@
-FROM golang:1.19 as builder
+FROM golang:1.23 as builder
 ENV CGO_ENABLED 0
 ENV GOPROXY https://goproxy.cn
 WORKDIR /app
