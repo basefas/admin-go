@@ -6,7 +6,7 @@ require (
 	github.com/casbin/casbin/v2 v2.103.0
 	github.com/casbin/gorm-adapter/v3 v3.32.0
 	github.com/gin-gonic/gin v1.10.1-0.20241230034037-3f818c3fa69e // fix cve
-	github.com/golang-jwt/jwt/v4 v4.5.1
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/viper v1.19.0
 	go.uber.org/zap v1.27.0
